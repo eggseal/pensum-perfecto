@@ -1,0 +1,419 @@
+Variables.CreateNewList List=> FlowModeList
+Variables.AddItemToList Item: $fx'Compartido' List: $fx'=FlowModeList'
+Variables.AddItemToList Item: $fx'Personal' List: $fx'=FlowModeList'
+LOOP WHILE $fx'=true'
+    Display.SelectFromListDialog.SelectFromList Title: $fx'Reiniciar Flujo' Message: $fx'Presione Aceptar para reiniciar el flujo y crear una nueva gráfica. \'Compartido\' toma los insumos de la carpeta especificada y \'Personal\' pide especificar los insumos manualmente' List: $fx'=FlowModeList' IsTopMost: False AllowEmpty: False SelectedItem=> FlowMode ButtonPressed=> StartButton
+    IF $fx'=StartButton="Cancel"' THEN
+        EXIT LOOP
+    END
+    /# File Input:
+Pide todas las entradas de insumos de Excel y valores estaticos#/
+    **REGION File Input
+    IF $fx'=FlowMode="Compartido"' THEN
+        Display.SelectFolder Description: $fx'Directorio de Insumos' IsTopMost: False SelectedFolder=> ConfigFolder
+        SET Input_Config TO $fx'=ConfigFolder.FullName & "\\config.txt"'
+        Variables.CreateNewDatatable InputTable: { ^['plan', 'program', 'ignore', 'template'], [$fx'', $fx'', $fx'', $fx''] } DataTable=> Config
+        File.ReadFromCSVFile.ReadCSV CSVFile: $fx'=Input_Config' Encoding: File.CSVEncoding.UTF8 TrimFields: True FirstLineContainsColumnNames: True ColumnsSeparator: File.CSVColumnsSeparator.Comma CSVTable=> Config
+        ON ERROR
+
+        END
+        SET ConfigRow TO $fx'=Index(Config, 1)'
+        IF $fx'=ConfigRow.plan="" Or ConfigRow.program=""' THEN
+            # Hacer que muestre el formulario completo si no hay insumos
+            Display.ShowMessageDialog.ShowMessage Title: $fx'Insumos insuficientes' Message: $fx'No se definieron los insumos completos en la carpeta compartida de insumos' Icon: Display.Icon.ErrorIcon Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: False
+            NEXT LOOP
+        END
+        SET Input_PlanPath TO $fx'=ConfigFolder.FullName & "\\" & ConfigRow.plan'
+        SET Input_ProgramPath TO $fx'=ConfigFolder.FullName & "\\" & ConfigRow.program'
+        SET Input_IgnorePath TO $fx'=ConfigFolder.FullName & "\\" & ConfigRow.ignore'
+        SET Input_TemplatePath TO $fx'=ConfigFolder.FullName & "\\" & ConfigRow.template'
+    ELSE
+        @@statistics_Input_File: '4'
+@@statistics_TextBlock: '4'
+@@statistics_Action_Submit: '2'
+Display.ShowCustomDialog CardTemplateJson: '''{
+  \"type\": \"AdaptiveCard\",
+  \"version\": \"1.4\",
+  \"id\": \"AdaptiveCard\",
+  \"body\": [
+    {
+      \"type\": \"Input.File\",
+      \"id\": \"plan\",
+      \"isRequired\": true,
+      \"label\": \"${plan_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block_Text}\",
+      \"wrap\": true
+    },
+    {
+      \"type\": \"Input.File\",
+      \"id\": \"program\",
+      \"isRequired\": true,
+      \"label\": \"${program_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block2\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block2_Text}\",
+      \"wrap\": true
+    },
+    {
+      \"type\": \"Input.File\",
+      \"id\": \"ignore\",
+      \"label\": \"${ignore_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block3\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block3_Text}\",
+      \"wrap\": true
+    },
+    {
+      \"type\": \"Input.File\",
+      \"id\": \"template\",
+      \"label\": \"${template_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block4\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block4_Text}\",
+      \"wrap\": true
+    }
+  ],
+  \"actions\": [
+    {
+      \"type\": \"Action.Submit\",
+      \"id\": \"Submit\",
+      \"title\": \"${Submit_Title}\"
+    },
+    {
+      \"type\": \"Action.Submit\",
+      \"id\": \"Cancel\",
+      \"associatedInputs\": \"none\",
+      \"title\": \"${Cancel_Title}\",
+      \"IsCancel\": true
+    }
+  ],
+  \"FormTitle\": \"${AdaptiveCard_FormTitle}\"
+}''' CustomFormData=> Config_Form ButtonPressed=> Config_FormButton @AdaptiveCard_FormTitle: $fx'Insumos de Graficación' @plan_Label: $fx'Plan Academico' @Text_block_Text: $fx'El archivo del plan academico como sale de Epik' @program_Label: $fx'Programa Academico' @Text_block2_Text: $fx'El archivo de la programacion academica como sale de Epik' @ignore_Label: $fx'Lista de omisión' @Text_block3_Text: $fx'El archivo de lista de omision (.txt)' @template_Label: $fx'Plantilla de Salida' @Text_block4_Text: $fx'La plantilla de Excel base para graficar las salidas' @Submit_Title: $fx'Ok' @Cancel_Title: $fx'Cancel'
+        IF $fx'=Config_FormButton="Cancel"' THEN
+            NEXT LOOP
+        END
+        SET Input_PlanPath TO $fx'=Config_Form.plan'
+        SET Input_ProgramPath TO $fx'=Config_Form.program'
+        SET Input_IgnorePath TO $fx'=Config_Form.ignore'
+        SET Input_TemplatePath TO $fx'=Config_Form.template'
+    END
+    Excel.LaunchExcel.LaunchAndOpenUnderExistingProcess Path: $fx'=Input_PlanPath' Visible: True ReadOnly: True Instance=> Input_PlanExcel
+    Excel.LaunchExcel.LaunchAndOpenUnderExistingProcess Path: $fx'=Input_ProgramPath' Visible: True ReadOnly: True Instance=> Input_ProgramExcel
+    **ENDREGION
+    /# Content Based Choice Input:
+Extrae los datos relevantes de Excel y ide todas las entradas de seleccion, las cuales cambian sus opciones segun el contenido en los insumos de Excel#/
+    **REGION Content Based Choice Input
+    # Lee la lista de nombres de las hojas (Codigos de carrera) y da la opcion de escoger entre ellas
+    **REGION Career Code Choice
+    Excel.GetAllWorksheets Instance: $fx'=Input_PlanExcel' Worksheets=> Main_CareerCodes
+    Display.SelectFromListDialog.SelectFromList Title: $fx'Seleccione el codigo del programa' Message: $fx'Seleccione uno de los programas segun aparecen en el plan academico' List: $fx'=Main_CareerCodes' IsTopMost: False AllowEmpty: False SelectedItem=> Input_Career ButtonPressed=> Input_CareerPressed
+    IF $fx'=Input_CareerPressed="Cancel"' THEN
+        Excel.CloseExcel.Close Instance: $fx'=Input_PlanExcel'
+        Excel.CloseExcel.Close Instance: $fx'=Input_ProgramExcel'
+        NEXT LOOP
+    END
+    @@statistics_Input_Number: '1'
+@@statistics_TextBlock: '2'
+@@statistics_Input_Text: '1'
+@@statistics_Input_ChoiceSet: '1'
+@@statistics_Action_Submit: '2'
+Display.ShowCustomDialog CardTemplateJson: '''{
+  \"type\": \"AdaptiveCard\",
+  \"version\": \"1.4\",
+  \"id\": \"AdaptiveCard\",
+  \"body\": [
+    {
+      \"type\": \"Input.Number\",
+      \"id\": \"Limit\",
+      \"value\": 0.0,
+      \"min\": 0.0,
+      \"isRequired\": true,
+      \"label\": \"${Limit_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block3\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block3_Text}\",
+      \"wrap\": true
+    },
+    {
+      \"type\": \"Input.Text\",
+      \"id\": \"Semester\",
+      \"isRequired\": true,
+      \"label\": \"${Semester_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block5\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block5_Text}\",
+      \"wrap\": true
+    },
+    {
+      \"type\": \"Input.ChoiceSet\",
+      \"id\": \"Component\",
+      \"value\": \"${Component_Value}\",
+      \"style\": \"expanded\",
+      \"isMultiSelect\": true,
+      \"choices\": [
+        {
+          \"title\": \"Clase\",
+          \"value\": \"Clase\"
+        },
+        {
+          \"title\": \"Clase-Unión\",
+          \"value\": \"Clase-Unión\"
+        },
+        {
+          \"title\": \"Conferencia\",
+          \"value\": \"Conferencia\"
+        },
+        {
+          \"title\": \"Deportes\",
+          \"value\": \"Deportes\"
+        },
+        {
+          \"title\": \"Inducción\",
+          \"value\": \"Inducción\"
+        },
+        {
+          \"title\": \"Laboratorio\",
+          \"value\": \"Laboratorio\"
+        },
+        {
+          \"title\": \"Prácticas\",
+          \"value\": \"Prácticas\"
+        }
+      ],
+      \"isRequired\": true,
+      \"label\": \"${Component_Label}\"
+    }
+  ],
+  \"actions\": [
+    {
+      \"type\": \"Action.Submit\",
+      \"id\": \"Submit\",
+      \"title\": \"${Submit_Title}\"
+    },
+    {
+      \"type\": \"Action.Submit\",
+      \"id\": \"Cancel\",
+      \"associatedInputs\": \"none\",
+      \"title\": \"${Cancel_Title}\",
+      \"IsCancel\": true
+    }
+  ],
+  \"FormTitle\": \"${AdaptiveCard_FormTitle}\"
+}''' CustomFormData=> Input_Form ButtonPressed=> Input_FormButton @AdaptiveCard_FormTitle: $fx'Insumos de Graficación' @Limit_Label: $fx'Limite de clases' @Text_block3_Text: $fx'La cantidad maxima de clases que se acepta por materia, las que se excedan son omitidas' @Semester_Label: $fx'Semestre' @Text_block5_Text: $fx'El numero del semestre a graficar' @Component_Label: $fx'Componentes' @Component_Value: $fx'Clase' @Submit_Title: $fx'Ok' @Cancel_Title: $fx'Cancel'
+    IF $fx'=Input_FormButton="Cancel"' THEN
+        Excel.CloseExcel.Close Instance: $fx'=Input_PlanExcel'
+        Excel.CloseExcel.Close Instance: $fx'=Input_ProgramExcel'
+        NEXT LOOP
+    END
+    **ENDREGION
+    # SI no se seleccionó un archivo de omision, ENTONCES lee todas las materias pertenecientes a los semestres seleccionados y da a escoger entre ellas
+    **REGION Omitted Class Choice
+    Excel.SetActiveWorksheet.ActivateWorksheetByName Instance: $fx'=Input_PlanExcel' Name: $fx'=Input_Career'
+    Excel.FilterCellsFromExcel.FilterSimpleWorksheet Instance: $fx'=Input_PlanExcel' Column: $fx'D' SimpleFilterValues: [$fx'=Input_Form.Semester']
+    Excel.SelectCellsFromExcel.SelectCells Instance: $fx'=Input_PlanExcel' StartColumn: $fx'A' StartRow: $fx'1' EndColumn: $fx'A' EndRow: $fx'1'
+    Excel.GetFirstFreeColumnRow Instance: $fx'=Input_PlanExcel' FirstFreeColumn=> CopyPaste_FirstFreeColumn FirstFreeRow=> CopyPaste_FirstFreeRow
+    Excel.SelectCellsFromExcel.SelectCells Instance: $fx'=Input_PlanExcel' StartColumn: $fx'A' StartRow: $fx'1' EndColumn: $fx'=CopyPaste_FirstFreeColumn' EndRow: $fx'=CopyPaste_FirstFreeRow'
+    Excel.CopyCellsFromExcel.CopyCells Instance: $fx'=Input_PlanExcel' StartColumn: $fx'A' StartRow: $fx'1' EndColumn: $fx'=CopyPaste_FirstFreeColumn' EndRow: $fx'=CopyPaste_FirstFreeRow'
+    Excel.AddWorksheet Instance: $fx'=Input_PlanExcel' Name: $fx'${Input_Career}-Filtered' WorksheetPosition: Excel.WorksheetPosition.Last
+    Excel.SetActiveWorksheet.ActivateWorksheetByName Instance: $fx'=Input_PlanExcel' Name: $fx'${Input_Career}-Filtered'
+    Excel.PasteCellsToExcel.PasteAt Instance: $fx'=Input_PlanExcel' Column: $fx'A' Row: $fx'1'
+    Excel.ReadFromExcel.ReadAllCells Instance: $fx'=Input_PlanExcel' ReadAsText: True FirstLineIsHeader: True RangeValue=> Input_PlanTable
+    Variables.RetrieveDataTableColumnIntoList DataTable: $fx'=Input_PlanTable' ColumnNameOrIndex: $fx'Catálogo' ColumnAsList=> Main_PlanCatalogList
+    IF (File.IfFile.Exists File: $fx'=Input_IgnorePath') THEN
+        File.ReadFromCSVFile.ReadCSV CSVFile: $fx'=Input_IgnorePath' Encoding: File.CSVEncoding.UTF8 TrimFields: True FirstLineContainsColumnNames: False ColumnsSeparator: File.CSVColumnsSeparator.Comma CSVTable=> Input_IgnoredTable
+        Variables.RetrieveDataTableColumnIntoList DataTable: $fx'=Input_IgnoredTable' ColumnNameOrIndex: $fx'1' ColumnAsList=> Input_IgnoredList
+    ELSE
+        Variables.CreateNewList List=> Input_IgnoredList
+    END
+    Variables.CreateNewList List=> Main_DisplayCatalog
+    LOOP FOREACH Loop_Catalog IN $fx'=Main_PlanCatalogList'
+        SET Loop_Finished TO $fx'=true'
+        SET Loop_Filtered TO $fx'=false'
+        LOOP FOREACH Loop_Ignored IN $fx'=Input_IgnoredList'
+            Text.CropText.CropTextBeforeFlag Text: $fx'=Loop_Ignored' ToFlag: $fx'*' IgnoreCase: True CroppedText=> Loop_Wildcard IsFlagFound=> Loop_IsWildcard
+            IF $fx'=Loop_IsWildcard=false' THEN
+                SET Loop_Wildcard TO $fx'=Loop_Ignored'
+            END
+            IF $fx'=StartsWith(Loop_Catalog, Loop_Wildcard)' THEN
+                Variables.AddItemToList Item: $fx'="+" & Loop_Catalog' List: $fx'=Main_DisplayCatalog'
+                SET Loop_Filtered TO $fx'=true'
+                EXIT LOOP
+            END
+        END
+        IF $fx'=Loop_Filtered=false' THEN
+            Variables.AddItemToList Item: $fx'=Loop_Catalog' List: $fx'=Main_DisplayCatalog'
+        END
+    END
+    Display.SelectFromListDialog.SelectItemsFromList Title: $fx'Seleccion de clases omitidas' Message: $fx'Seleccione los codigos de las clases que se van a omitir de la grafica' List: $fx'=Main_DisplayCatalog' IsTopMost: False AllowEmpty: True PreSelectItemsWithPlus: True SelectedItems=> Input_IgnoredList ButtonPressed=> Input_IgnoredButton
+    IF $fx'=Input_IgnoredButton="Cancel"' THEN
+        Excel.CloseExcel.Close Instance: $fx'=Input_PlanExcel'
+        Excel.CloseExcel.Close Instance: $fx'=Input_ProgramExcel'
+        NEXT LOOP
+    END
+    Variables.SubtractLists FirstList: $fx'=Main_PlanCatalogList' SecondList: $fx'=Input_IgnoredList' OutputList=> Main_GraphCodeList
+    **ENDREGION
+    **ENDREGION
+    # Abre el programa academico y hace JOIN de las materias seleccionadas
+    Excel.SetActiveWorksheet.ActivateWorksheetByIndex Instance: $fx'=Input_ProgramExcel' Index: $fx'=1'
+    Excel.DeleteRow Instance: $fx'=Input_ProgramExcel' Index: $fx'1'
+    Variables.CreateNewDatatable InputTable: { } DataTable=> Input_ProgramTable
+    LOOP FOREACH Main_PlanCatalog IN $fx'=Main_GraphCodeList'
+        LOOP FOREACH Loop_Component IN $fx'=Split(Input_Form.Component, ",")'
+            Excel.SetActiveWorksheet.ActivateWorksheetByIndex Instance: $fx'=Input_ProgramExcel' Index: $fx'1'
+            Excel.FilterCellsFromExcel.FilterSimpleWorksheet Instance: $fx'=Input_ProgramExcel' Column: $fx'D' SimpleFilterValues: [$fx'=Main_PlanCatalog']
+            Excel.FilterCellsFromExcel.FilterSimpleWorksheet Instance: $fx'=Input_ProgramExcel' Column: $fx'AI' SimpleFilterValues: [$fx'=Loop_Component.Value']
+            Excel.SelectCellsFromExcel.SelectCells Instance: $fx'=Input_ProgramExcel' StartColumn: $fx'A' StartRow: $fx'1' EndColumn: $fx'A' EndRow: $fx'1'
+            Excel.GetFirstFreeColumnRow Instance: $fx'=Input_ProgramExcel' FirstFreeColumn=> CopyPaste_FirstFreeColumn FirstFreeRow=> CopyPaste_FirstFreeRow
+            Excel.SelectCellsFromExcel.SelectCells Instance: $fx'=Input_ProgramExcel' StartColumn: $fx'A' StartRow: $fx'1' EndColumn: $fx'=CopyPaste_FirstFreeColumn' EndRow: $fx'=CopyPaste_FirstFreeRow'
+            Excel.CopyCellsFromExcel.CopyCells Instance: $fx'=Input_ProgramExcel' StartColumn: $fx'A' StartRow: $fx'1' EndColumn: $fx'=CopyPaste_FirstFreeColumn' EndRow: $fx'=CopyPaste_FirstFreeRow'
+            Excel.AddWorksheet Instance: $fx'=Input_ProgramExcel' Name: $fx'Filtered-Sheet' WorksheetPosition: Excel.WorksheetPosition.Last
+            Excel.SetActiveWorksheet.ActivateWorksheetByName Instance: $fx'=Input_ProgramExcel' Name: $fx'Filtered-Sheet'
+            Excel.PasteCellsToExcel.PasteAt Instance: $fx'=Input_ProgramExcel' Column: $fx'A' Row: $fx'1'
+            Excel.GetFirstFreeColumnRow Instance: $fx'=Input_ProgramExcel' FirstFreeRow=> Loop_FreeRow
+            SET Loop_ClassAmount TO $fx'=Loop_FreeRow-2'
+            IF $fx'=Loop_ClassAmount>Input_Form.Limit && Input_Form.Limit > 0' THEN
+                Excel.DeleteWorksheet.DeleteWorksheetByName Instance: $fx'=Input_ProgramExcel' Name: $fx'Filtered-Sheet'
+                NEXT LOOP
+            END
+            Excel.ReadFromExcel.ReadAllCells Instance: $fx'=Input_ProgramExcel' ReadAsText: True FirstLineIsHeader: True RangeValue=> Loop_ProgramTable
+            Variables.MergeDataTables FirstDataTable: $fx'=Input_ProgramTable' SecondDataTable: $fx'=Loop_ProgramTable' MergeMode: Variables.MergeMode.AddExtraColumns
+            Excel.DeleteWorksheet.DeleteWorksheetByName Instance: $fx'=Input_ProgramExcel' Name: $fx'Filtered-Sheet'
+        END
+    END
+    Excel.LaunchExcel.LaunchUnderExistingProcess Visible: True Instance=> Main_Output
+    SET FileExtension TO $fx'=""'
+    IF (File.IfFile.Exists File: $fx'=Input_TemplatePath') THEN
+        File.GetPathPart File: $fx'=Input_TemplatePath' Extension=> FileExtension
+        IF $fx'=FileExtension=".xlsx"' THEN
+            Excel.LaunchExcel.LaunchAndOpenUnderExistingProcess Path: $fx'=Input_TemplatePath' Visible: False ReadOnly: False Instance=> Main_Template
+        ELSE
+            Excel.LaunchExcel.LaunchUnderExistingProcess Visible: False Instance=> Main_Template
+        END
+        Excel.CopyExcelWorksheet.CopyWorksheetWithIndex SourceInstance: $fx'=Main_Template' SourceWorksheetIndex: $fx'1' TargetInstance: $fx'=Main_Output' TargetWorksheetName: $fx'Hoja Grafica' PasteWorksheetPosition: Excel.WorksheetPosition.Last
+        Excel.DeleteWorksheet.DeleteWorksheetByIndex Instance: $fx'=Main_Output' Index: $fx'1'
+        Excel.CloseExcel.Close Instance: $fx'=Main_Template'
+    END
+    Excel.WriteToExcel.WriteCell Instance: $fx'=Main_Output' Value: $fx'=Input_Career' Column: $fx'B' Row: $fx'1'
+    Excel.WriteToExcel.WriteCell Instance: $fx'=Main_Output' Value: $fx'=Input_Form.Semester' Column: $fx'B' Row: $fx'2'
+    Excel.WriteToExcel.WriteCell Instance: $fx'=Main_Output' Value: $fx'=Input_Form.Limit' Column: $fx'B' Row: $fx'3'
+    IF $fx'=FileExtension=""' THEN
+        Excel.WriteToExcel.WriteCell Instance: $fx'=Main_Output' Value: $fx'Carrera' Column: $fx'A' Row: $fx'1'
+        Excel.WriteToExcel.WriteCell Instance: $fx'=Main_Output' Value: $fx'Semestre' Column: $fx'A' Row: $fx'2'
+        Excel.WriteToExcel.WriteCell Instance: $fx'=Main_Output' Value: $fx'Limite' Column: $fx'A' Row: $fx'3'
+        SET BaseText TO $fx'---,Lunes,Martes,Miercoles,Jueves,Viernes,Sabado,Domingo
+6:00,,,,,,,
+6:30,,,,,,,
+7:00,,,,,,,
+7:30,,,,,,,
+8:00,,,,,,,
+8:30,,,,,,,
+9:00,,,,,,,
+9:30,,,,,,,
+10:00,,,,,,,
+10:30,,,,,,,
+11:00,,,,,,,
+11:30,,,,,,,
+12:00,,,,,,,
+12:30,,,,,,,
+13:00,,,,,,,
+13:30,,,,,,,
+14:00,,,,,,,
+14:30,,,,,,,
+15:00,,,,,,,
+15:30,,,,,,,
+16:00,,,,,,,
+16:30,,,,,,,
+17:00,,,,,,,
+17:30,,,,,,,
+18:00,,,,,,,
+18:30,,,,,,,
+19:00,,,,,,,
+19:30,,,,,,,
+20:00,,,,,,,
+20:30,,,,,,,
+21:00,,,,,,,
+21:30,,,,,,,
+22:00,,,,,,,'
+        Variables.GenerateDataTableFromCSV.ReadPredefinedSeparator CSVText: $fx'=BaseText' TrimFields: True FirstLineContainsColumnNames: False ReadFieldsAsText: True ColumnsSeparator: Variables.CSVColumnsSeparator.Comma CSVTable=> BaseTable
+        Excel.WriteToExcel.WriteCell Instance: $fx'=Main_Output' Value: $fx'=BaseTable' Column: $fx'E' Row: $fx'2'
+    END
+    LOOP FOREACH Loop_Program IN $fx'=Input_ProgramTable'
+        SET Loop_WriteRow TO $fx'=3'
+        SET Loop_WriteCol TO $fx'=6'
+        Text.CropText.CropTextBeforeFlag Text: $fx'=Loop_Program.\'Hora Inicio\'' ToFlag: $fx':' IgnoreCase: False CroppedText=> Loop_StartHour
+        Text.CropText.CropTextBetweenFlags Text: $fx'=Loop_Program.\'Hora Inicio\'' FromFlag: $fx':' ToFlag: $fx':' IgnoreCase: False CroppedText=> Loop_StartMinute
+        Text.CropText.CropTextBeforeFlag Text: $fx'=Loop_Program.\'Hora Fin\'' ToFlag: $fx':' IgnoreCase: False CroppedText=> Loop_EndHour
+        Text.CropText.CropTextBetweenFlags Text: $fx'=Loop_Program.\'Hora Fin\'' FromFlag: $fx':' ToFlag: $fx':' IgnoreCase: False CroppedText=> Loop_EndMinute
+        Variables.IncreaseVariable Value: $fx'=Loop_WriteRow' IncrementValue: $fx'=(Int(Loop_StartHour)-6)*2 + (Int(Loop_StartMinute) / 30)'
+        Text.SplitText.SplitWithDelimiter Text: $fx'=PlainText(Loop_Program.\'Días\')' CustomDelimiter: $fx'=", "' IsRegEx: False Result=> Loop_DayList
+        LOOP FOREACH Loop_Day IN $fx'=Loop_DayList'
+            Text.Trim Text: $fx'=Loop_Day' TrimOption: Text.TrimOption.Both TrimmedText=> TrimmedText
+            IF $fx'=TrimmedText="Lunes"' THEN
+                Variables.IncreaseVariable Value: $fx'=Loop_WriteCol' IncrementValue: $fx'=0'
+            ELSE IF $fx'=TrimmedText="Martes"' THEN
+                Variables.IncreaseVariable Value: $fx'=Loop_WriteCol' IncrementValue: $fx'=1'
+            ELSE IF $fx'=TrimmedText="Miercoles"' THEN
+                Variables.IncreaseVariable Value: $fx'=Loop_WriteCol' IncrementValue: $fx'=2'
+            ELSE IF $fx'=TrimmedText="Jueves"' THEN
+                Variables.IncreaseVariable Value: $fx'=Loop_WriteCol' IncrementValue: $fx'=3'
+            ELSE IF $fx'=TrimmedText="Viernes"' THEN
+                Variables.IncreaseVariable Value: $fx'=Loop_WriteCol' IncrementValue: $fx'=4'
+            ELSE IF $fx'=TrimmedText="Sábado"' THEN
+                Variables.IncreaseVariable Value: $fx'=Loop_WriteCol' IncrementValue: $fx'=5'
+            ELSE IF $fx'=TrimmedText="Domingo"' THEN
+                Variables.IncreaseVariable Value: $fx'=Loop_WriteCol' IncrementValue: $fx'=6'
+            END
+            LOOP LoopI_ndex FROM $fx'=Int(Loop_StartHour)*2 + Int(Loop_StartMinute) / 30 + 1' TO $fx'=Int(Loop_EndHour) * 2 + Int(Loop_EndMinute) / 30' STEP $fx'=1'
+                IF $fx'=Loop_WriteRow<3' THEN
+                    Display.ShowMessageDialog.ShowMessage Title: $fx'Error de clase' Message: $fx'La clase ${Loop_Program.\'Código Catalogo\'}(${Loop_Program.\'Número de Clase\'}) no se pudo graficar porque tiene programado el horario entre ${Loop_Program.\'Hora Inicio\'} y ${Loop_Program.\'Hora Fin\'}, por lo tanto se va a omitir de la gráfica.' Icon: Display.Icon.Warning Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: False
+                    EXIT LOOP
+                END
+                Excel.ReadFromExcel.ReadCell Instance: $fx'=Main_Output' StartColumn: $fx'=Loop_WriteCol' StartRow: $fx'=Loop_WriteRow' ReadAsText: True CellValue=> Loop_ExistingCell
+                SET Loop_ResultCell TO $fx'=""'
+                IF $fx'=Loop_ExistingCell<>""' THEN
+                    SET Loop_ResultCell TO $fx'${Loop_ExistingCell}${Char(10)}'
+                END
+                SET Loop_ResultCell TO $fx'${Loop_ResultCell}${Loop_Program.\'Código Catalogo\'}-${Loop_Program.\'Número de Clase\'}'
+                Excel.WriteToExcel.WriteCell Instance: $fx'=Main_Output' Value: $fx'=Loop_ResultCell' Column: $fx'=Loop_WriteCol' Row: $fx'=Loop_WriteRow'
+                Excel.SetColor.SetColorSingleCellHex Instance: $fx'=Main_Output' StartColumn: $fx'=Loop_WriteCol' StartRow: $fx'=Loop_WriteRow' ColorHexValue: $fx'DF9F9F'
+                ON ERROR REPEAT 5 TIMES WAIT 1
+                END
+                Variables.IncreaseVariable Value: $fx'=Loop_WriteRow' IncrementValue: $fx'=1'
+            END
+        END
+    END
+    Excel.CloseExcel.Close Instance: $fx'=Input_PlanExcel'
+    Excel.CloseExcel.Close Instance: $fx'=Input_ProgramExcel'
+END

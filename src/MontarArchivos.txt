@@ -1,0 +1,149 @@
+@@statistics_statistics_statistics_statistics_Input_File: '4'
+@@statistics_statistics_statistics_statistics_TextBlock: '4'
+@@statistics_statistics_statistics_statistics_Action_Submit: '2'
+Display.ShowCustomDialog CardTemplateJson: '''{
+  \"type\": \"AdaptiveCard\",
+  \"version\": \"1.4\",
+  \"id\": \"AdaptiveCard\",
+  \"body\": [
+    {
+      \"type\": \"Input.File\",
+      \"id\": \"Plan\",
+      \"label\": \"${Plan_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block_Text}\",
+      \"wrap\": true
+    },
+    {
+      \"type\": \"Input.File\",
+      \"id\": \"Program\",
+      \"label\": \"${Program_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block2\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block2_Text}\",
+      \"wrap\": true
+    },
+    {
+      \"type\": \"Input.File\",
+      \"id\": \"Ignore\",
+      \"label\": \"${Ignore_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block3\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block3_Text}\",
+      \"wrap\": true
+    },
+    {
+      \"type\": \"Input.File\",
+      \"id\": \"Template\",
+      \"label\": \"${Template_Label}\"
+    },
+    {
+      \"type\": \"TextBlock\",
+      \"id\": \"Text block4\",
+      \"size\": \"small\",
+      \"color\": \"dark\",
+      \"isSubtle\": true,
+      \"text\": \"${Text_block4_Text}\",
+      \"wrap\": true
+    }
+  ],
+  \"actions\": [
+    {
+      \"type\": \"Action.Submit\",
+      \"id\": \"Submit\",
+      \"title\": \"${Submit_Title}\"
+    },
+    {
+      \"type\": \"Action.Submit\",
+      \"id\": \"Cancel\",
+      \"associatedInputs\": \"none\",
+      \"title\": \"${Cancel_Title}\",
+      \"IsCancel\": true
+    }
+  ],
+  \"FormTitle\": \"${AdaptiveCard_FormTitle}\"
+}''' CustomFormData=> InputForm ButtonPressed=> FormAction @AdaptiveCard_FormTitle: $fx'Insumos de Graficación' @Plan_Label: $fx'Plan Academico' @Text_block_Text: $fx'El archivo del plan academico como sale de Epik' @Program_Label: $fx'Programa Academico' @Text_block2_Text: $fx'El archivo de la programacion academica como sale de Epik' @Ignore_Label: $fx'Lista de omisión' @Text_block3_Text: $fx'El archivo de lista de omision (.txt)' @Template_Label: $fx'Plantilla de Salida' @Text_block4_Text: $fx'La plantilla de Excel base para graficar las salidas' @Submit_Title: $fx'Ok' @Cancel_Title: $fx'Cancel'
+IF $fx'=FormAction="Cancel"' THEN
+    Display.ShowMessageDialog.ShowMessage Title: $fx'Configuracion Cancelada' Message: $fx'Se canceló la configuración de los insumos correctamente.' Icon: Display.Icon.Information Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: False
+    EXIT Code: $fx'=0'
+END
+Display.SelectFolder Description: $fx'Carpeta de Insumos Compartidos' IsTopMost: False SelectedFolder=> OutputFolder ButtonPressed=> FolderAction
+IF $fx'=FolderAction="Cancelar" || FolderAction="Cancel"' THEN
+    Display.ShowMessageDialog.ShowMessage Title: $fx'Configuracion Cancelada' Message: $fx'Se canceló la configuración de los insumos correctamente.' Icon: Display.Icon.Information Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: False
+    EXIT Code: $fx'=0'
+END
+# Input de archivos, lee el plan y saca los codigos de carreras, lee el programa y saca los componentes? Al final genera un config.json que tenga mapeadas todos estos nombres
+SET OutputConfig TO $fx'=OutputFolder.FullName & "\\config.txt"'
+File.ReadFromCSVFile.ReadCSV CSVFile: $fx'=OutputConfig' Encoding: File.CSVEncoding.UTF8 TrimFields: True FirstLineContainsColumnNames: True ColumnsSeparator: File.CSVColumnsSeparator.Comma CSVTable=> ConfigExisting
+ON ERROR
+
+END
+IF $fx'=IsEmpty(Table(ConfigExisting))' THEN
+    Variables.CreateNewDatatable InputTable: { ^['template', 'plan', 'program', 'ignore'], [$fx'', $fx'', $fx'', $fx''] } DataTable=> ConfigExisting
+END
+SET ConfigRow TO $fx'=Index(ConfigExisting, 1)'
+IF (File.IfFile.Exists File: $fx'=InputForm.Plan') THEN
+    IF $fx'=ConfigRow.plan<>""' THEN
+        File.Move Files: $fx'=OutputFolder.FullName & "\\" & ConfigRow.plan' Destination: $fx'=OutputFolder.FullName & "\\Antiguo\\"' IfFileExists: File.IfExists.Overwrite MovedFiles=> MovedFiles
+        DISABLE File.Delete Files: $fx'=OutputFolder.FullName & "\\" & ConfigRow.plan'
+ON ERROR FileNotFoundError
+
+END
+    END
+    File.GetPathPart File: $fx'=InputForm.Plan' FileName=> FilenamePlan
+    File.Copy Files: $fx'=InputForm.Plan' Destination: $fx'=OutputFolder' IfFileExists: File.IfExists.Overwrite CopiedFiles=> CopiedFiles
+    Variables.ModifyDataTableItem DataTable: $fx'=ConfigExisting' ColumnNameOrIndex: $fx'plan' RowIndex: $fx'1' Value: $fx'=FilenamePlan'
+END
+IF (File.IfFile.Exists File: $fx'=InputForm.Program') THEN
+    IF $fx'=ConfigRow.program<>""' THEN
+        File.Move Files: $fx'=OutputFolder.FullName & "\\" & ConfigRow.program' Destination: $fx'=OutputFolder.FullName & "\\Antiguo\\"' IfFileExists: File.IfExists.Overwrite MovedFiles=> MovedFiles
+        DISABLE File.Delete Files: $fx'=OutputFolder.FullName & "\\" & ConfigRow.program'
+ON ERROR FileNotFoundError
+
+END
+    END
+    File.GetPathPart File: $fx'=InputForm.Program' FileName=> FilenameProgram
+    File.Copy Files: $fx'=InputForm.Program' Destination: $fx'=OutputFolder' IfFileExists: File.IfExists.Overwrite CopiedFiles=> CopiedFiles
+    Variables.ModifyDataTableItem DataTable: $fx'=ConfigExisting' ColumnNameOrIndex: $fx'program' RowIndex: $fx'1' Value: $fx'=FilenameProgram'
+END
+IF (File.IfFile.Exists File: $fx'=InputForm.Ignore') THEN
+    IF $fx'=ConfigRow.ignore<>""' THEN
+        File.Move Files: $fx'=OutputFolder.FullName & "\\" & ConfigRow.ignore' Destination: $fx'=OutputFolder.FullName & "\\Antiguo\\"' IfFileExists: File.IfExists.Overwrite MovedFiles=> MovedFiles
+        DISABLE File.Delete Files: $fx'=OutputFolder.FullName & "\\" & ConfigRow.ignore'
+ON ERROR FileNotFoundError
+
+END
+    END
+    File.GetPathPart File: $fx'=InputForm.Ignore' FileName=> FilenameIgnore
+    File.Copy Files: $fx'=InputForm.Ignore' Destination: $fx'=OutputFolder' IfFileExists: File.IfExists.Overwrite CopiedFiles=> CopiedFiles
+    Variables.ModifyDataTableItem DataTable: $fx'=ConfigExisting' ColumnNameOrIndex: $fx'ignore' RowIndex: $fx'1' Value: $fx'=FilenameIgnore'
+END
+IF (File.IfFile.Exists File: $fx'=InputForm.Template') THEN
+    IF $fx'=ConfigRow.template<>""' THEN
+        File.Move Files: $fx'=OutputFolder.FullName & "\\" & ConfigRow.template' Destination: $fx'=OutputFolder.FullName & "\\Antiguo\\"' IfFileExists: File.IfExists.Overwrite MovedFiles=> MovedFiles
+        DISABLE File.Delete Files: $fx'=OutputFolder.FullName & "\\" & ConfigRow.template'
+ON ERROR FileNotFoundError
+
+END
+    END
+    File.GetPathPart File: $fx'=InputForm.Template' FileName=> FilenameTemplate
+    File.Copy Files: $fx'=InputForm.Template' Destination: $fx'=OutputFolder' IfFileExists: File.IfExists.Overwrite CopiedFiles=> CopiedFiles
+    Variables.ModifyDataTableItem DataTable: $fx'=ConfigExisting' ColumnNameOrIndex: $fx'template' RowIndex: $fx'1' Value: $fx'=FilenameTemplate'
+END
+File.WriteToCSVFile.WriteCSV VariableToWrite: $fx'=ConfigExisting' CSVFile: $fx'=OutputConfig' CsvFileEncoding: File.CSVEncoding.UTF8 IncludeColumnNames: True IfFileExists: File.IfFileExists.Overwrite ColumnsSeparator: File.CSVColumnsSeparator.Comma
