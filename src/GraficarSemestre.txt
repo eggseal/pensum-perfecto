@@ -2,7 +2,9 @@ Variables.CreateNewList List=> FlowModeList
 Variables.AddItemToList Item: $fx'Compartido' List: $fx'=FlowModeList'
 Variables.AddItemToList Item: $fx'Personal' List: $fx'=FlowModeList'
 LOOP WHILE $fx'=true'
-    Display.SelectFromListDialog.SelectFromList Title: $fx'Reiniciar Flujo' Message: $fx'Presione Aceptar para reiniciar el flujo y crear una nueva gráfica. \'Compartido\' toma los insumos de la carpeta especificada y \'Personal\' pide especificar los insumos manualmente' List: $fx'=FlowModeList' IsTopMost: False AllowEmpty: False SelectedItem=> FlowMode ButtonPressed=> StartButton
+    Display.SelectFromListDialog.SelectFromList Title: $fx'Reiniciar Flujo' Message: $fx'Presione \'Ok\' para reiniciar el flujo y crear una nueva grafica.
+- \'Compartido\' toma los insumos de la carpeta especificada generados por el otro flujo
+- \'Personal\' pide especificar cada insumo manualmente' List: $fx'=FlowModeList' IsTopMost: False AllowEmpty: False SelectedItem=> FlowMode ButtonPressed=> StartButton
     IF $fx'=StartButton="Cancel"' THEN
         EXIT LOOP
     END
