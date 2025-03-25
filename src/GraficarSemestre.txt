@@ -310,7 +310,18 @@ Display.ShowCustomDialog CardTemplateJson: '''{
                 NEXT LOOP
             END
             Excel.ReadFromExcel.ReadAllCells Instance: $fx'=Input_ProgramExcel' ReadAsText: True FirstLineIsHeader: True RangeValue=> Loop_ProgramTable
+            SET MergeError TO $fx'="0"'
             Variables.MergeDataTables FirstDataTable: $fx'=Input_ProgramTable' SecondDataTable: $fx'=Loop_ProgramTable' MergeMode: Variables.MergeMode.AddExtraColumns
+            ON ERROR MissingSchemaError
+                SET MergeError TO $fx'1'
+            ON ERROR
+
+            END
+            IF $fx'=MergeError="1"' THEN
+                LOOP FOREACH CurrentItem IN $fx'=Loop_ProgramTable'
+                    Variables.AddRowToDataTable.AppendRowToDataTable DataTable: $fx'=Input_ProgramTable' RowToAdd: $fx'=CurrentItem'
+                END
+            END
             Excel.DeleteWorksheet.DeleteWorksheetByName Instance: $fx'=Input_ProgramExcel' Name: $fx'Filtered-Sheet'
         END
     END
